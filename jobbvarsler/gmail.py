@@ -121,7 +121,8 @@ def _walk(part: dict, plain: list[str], htmls: list[str]) -> None:
     mime = part.get("mimeType", "")
     data = part.get("body", {}).get("data")
     if data and mime == "text/plain":
-        plain.append(_decode(data))
+        # Noen rekrutteringssystemer har HTML-koder også i ren tekst ("s&oslash;knad").
+        plain.append(html.unescape(_decode(data)))
     elif data and mime == "text/html":
         htmls.append(_decode(data))
     for sub in part.get("parts") or []:
