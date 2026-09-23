@@ -15,7 +15,19 @@ def load_state() -> dict:
     state.setdefault("last_check", None)
     state.setdefault("processed", {})  # message id -> mottatt-tidspunkt (epoch)
     state.setdefault("findings", [])
+    state.setdefault("overrides", {})  # message id -> {company, category, hidden}
     return state
+
+
+def set_override(message_id: str, **changes) -> bool:
+    """Retter bedrift/kategori eller skjuler et funn. False hvis funnet ikke finnes."""
+    state = load_state()
+    if not any(f["id"] == message_id for f in state["findings"]):
+        return False
+    override = state["overrides"].setdefault(message_id, {})
+    override.update({k: v for k, v in changes.items() if v is not None})
+    save_state(state)
+    return True
 
 
 def save_state(state: dict) -> None:

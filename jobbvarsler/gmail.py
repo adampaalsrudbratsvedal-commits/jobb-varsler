@@ -71,9 +71,9 @@ def get_service(interactive: bool = False):
     return build("gmail", "v1", credentials=load_credentials(interactive), cache_discovery=False)
 
 
-def list_message_ids(service, after_ts: int, limit: int) -> list[str]:
+def list_message_ids(service, after_ts: int, limit: int, extra_query: str = "") -> list[str]:
     """ID-er for mottatte e-poster etter `after_ts` (epoch-sekunder), nyeste først."""
-    query = f"after:{after_ts} -in:sent -in:drafts -in:chats -in:spam -in:trash"
+    query = f"after:{after_ts} -in:sent -in:drafts -in:chats -in:spam -in:trash {extra_query}".strip()
     ids: list[str] = []
     page_token = None
     while len(ids) < limit:

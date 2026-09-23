@@ -4,6 +4,8 @@ Hver kategori har faste fraser, sjekket i prioritert rekkefølge. E-posten må h
 om en søknad/stilling for å telle i det hele tatt.
 """
 
+import re
+
 from .gmail import Email
 
 # Må finnes et sted i e-posten for at den skal regnes som jobbrelatert.
@@ -12,6 +14,8 @@ CONTEXT_WORDS = (
     "internship", "trainee", "application", "applied", "candidate", "position",
     "recruit", "interview", "role",
 )
+
+BULK_SUBJECT_WORDS = ("søknad", "søkt", "application", "applying", "applied", "intervju", "interview")
 
 # Typiske jobbvarsler, nettverksinvitasjoner og kontovarsler som ikke er svar på en søknad.
 NOISE_PHRASES = (
@@ -28,12 +32,19 @@ OFFER = (
     "glade for å kunne tilby", "job offer", "offer letter", "pleased to offer",
     "employment contract",
 )
+# "Dessverre"/"unfortunately" alene er for svakt ("det er dessverre ikke mulig å redigere
+# søknaden"), så frasene må si at du ikke går videre.
 REJECTION = (
-    "dessverre", "unfortunately", "ikke gå videre med", "ikke nådd opp",
-    "andre kandidater", "gått videre med andre", "valgt en annen kandidat",
-    "other candidates", "not be moving forward", "not to move forward",
-    "not been successful", "regret to inform", "decided to proceed with other",
-    "decided not to proceed",
+    "dessverre valgt", "har dessverre", "må dessverre", "dessverre ikke nådd",
+    "dessverre ikke blitt", "dessverre ikke kommet", "dessverre ikke gå videre",
+    "ikke gå videre med din", "ikke gå videre med deg", "ikke nådd opp",
+    "gå videre med andre", "gått videre med andre", "gå videre med profiler",
+    "gå videre med kandidater som", "valgt andre kandidater",
+    "valgt en annen kandidat", "ikke blitt valgt", "ikke blitt med videre",
+    "unfortunately we", "unfortunately, we", "move forward with other",
+    "moving forward with other", "pursue other candidates", "not be moving forward",
+    "not to move forward", "not been selected", "not been successful",
+    "regret to inform", "decided to proceed with other", "decided not to proceed",
 )
 # Må være en faktisk invitasjon til deg. Kvitteringer nevner ofte intervju i fremtid
 # ("de mest aktuelle vil bli invitert til intervju"), så generelle ord holder ikke.
@@ -65,10 +76,15 @@ def categorize(email: Email) -> str | None:
     """Kategori for en jobbrelatert tilbakemelding, eller None hvis e-posten ikke er det."""
     subject = email.subject.lower()
     text = f"{email.sender}\n{email.subject}\n{email.snippet}\n{email.body[:8000]}".lower()
+    # Linjeskift og hårde mellomrom midt i en frase skal ikke hindre treff.
+    text = re.sub(r"\s+", " ", text)
 
     if any(p in text[:3000] for p in NOISE_PHRASES):
         return None
     if not any(w in text for w in CONTEXT_WORDS):
+        return None
+    # Nyhetsbrev (har avmeldingslenke) teller bare hvis emnet handler om en søknad.
+    if email.is_bulk and not any(w in subject for w in BULK_SUBJECT_WORDS):
         return None
 
     def has(phrases: tuple[str, ...]) -> bool:

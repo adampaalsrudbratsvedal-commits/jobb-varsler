@@ -4,20 +4,67 @@ import logging
 
 from mcp.server.mcpserver import MCPServer
 
+from typing import Literal
+
 from . import gmail
+from .applications import apply_overrides, build_applications
 from .config import LOG_FILE, MAX_BODY_CHARS
+from .dashboard import open_dashboard as _open_dashboard, write_dashboard
 from .gmail import AuthRequired
 from .pipeline import check_new, recent_findings
+from .store import load_state, set_override
 
 mcp = MCPServer(
     "jobb-varsler",
     instructions=(
         "Verktøy for å finne jobbrelaterte tilbakemeldinger (intervju, avslag, tilbud, "
         "neste steg, mottatt søknad) i brukerens Gmail. Funn med verified=false er sortert "
-        "med enkle fraseregler og kan ha feil kategori; bruk read_email og vurder selv når "
-        "kategorien virker usikker, og rett den i svaret ditt."
+        "med enkle fraseregler og kan ha feil kategori eller bedrift; bruk read_email ved tvil "
+        "og rett opp med correct_finding, så oversikten (varslingssentralen) blir riktig."
     ),
 )
+
+
+@mcp.tool()
+def list_applications(status: str | None = None) -> dict:
+    """Oversikt over alle søknader gruppert per bedrift, med status og tidslinje.
+
+    Args:
+        status: Filtrer på mottatt (venter på svar), neste_steg, intervju, tilbud eller avslag.
+    """
+    state = load_state()
+    apps = build_applications(apply_overrides(state["findings"], state["overrides"]))
+    if status:
+        apps = [a for a in apps if a["status"] == status]
+    return {"count": len(apps), "applications": apps}
+
+
+@mcp.tool()
+def correct_finding(
+    message_id: str,
+    company: str | None = None,
+    category: Literal["mottatt", "neste_steg", "intervju", "tilbud", "avslag", "annet"] | None = None,
+    hidden: bool | None = None,
+) -> dict:
+    """Rett bedriftsnavn eller kategori på et funn, eller skjul det (hidden=true) hvis det
+    ikke er en søknad. Oppdaterer varslingssentralen.
+
+    Args:
+        message_id: `id`-feltet fra et funn.
+        company: Riktig bedriftsnavn.
+        category: Riktig kategori.
+        hidden: true for å skjule funnet, false for å vise det igjen.
+    """
+    if not set_override(message_id, company=company, category=category, hidden=hidden):
+        return {"error": f"Fant ikke noe funn med id {message_id}."}
+    write_dashboard()
+    return {"ok": True}
+
+
+@mcp.tool()
+def open_dashboard() -> dict:
+    """Åpne varslingssentralen (oversikten over alle søknader og svar) i nettleseren."""
+    return {"path": _open_dashboard()}
 
 
 @mcp.tool()

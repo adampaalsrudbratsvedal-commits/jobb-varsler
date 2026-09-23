@@ -9,7 +9,7 @@ import logging
 import subprocess
 from xml.sax.saxutils import escape, quoteattr
 
-from .config import NOTIFY_CATEGORIES
+from .config import DASHBOARD_FILE, NOTIFY_CATEGORIES
 
 log = logging.getLogger(__name__)
 
@@ -46,7 +46,10 @@ def toast(title: str, message: str, url: str = GMAIL_INBOX) -> None:
         f"<text>{escape(message)}</text>"
         "<text placement=\"attribution\">Jobbvarsler</text>"
         "</binding></visual>"
-        f"<actions><action content=\"Åpne i Gmail\" activationType=\"protocol\" arguments={quoteattr(url)}/></actions>"
+        "<actions>"
+        f"<action content=\"Åpne i Gmail\" activationType=\"protocol\" arguments={quoteattr(url)}/>"
+        f"<action content=\"Se oversikt\" activationType=\"protocol\" arguments={quoteattr(DASHBOARD_FILE.as_uri())}/>"
+        "</actions>"
         "<audio src=\"ms-winsoundevent:Notification.Default\"/>"
         "</toast>"
     )

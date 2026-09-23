@@ -9,7 +9,8 @@ import anthropic
 
 from . import gmail
 from .classifier import classify, looks_job_related, make_client
-from .config import FIRST_RUN_LOOKBACK_DAYS, MAX_MESSAGES_PER_RUN
+from .config import FIRST_RUN_LOOKBACK_DAYS, MAX_MESSAGES_PER_RUN, MAX_SCAN_MESSAGES, SCAN_QUERY
+from .dashboard import write_dashboard
 from .notify import notify_findings
 from .rules import categorize
 from .store import load_state, save_state
@@ -32,8 +33,12 @@ def check_new(notify: bool, lookback_days: int | None = None) -> list[dict]:
         after = now - FIRST_RUN_LOOKBACK_DAYS * 86400
 
     service = gmail.get_service()
-    ids = gmail.list_message_ids(service, after, MAX_MESSAGES_PER_RUN)
-    if len(ids) >= MAX_MESSAGES_PER_RUN:
+    if lookback_days is not None:
+        limit, extra_query = MAX_SCAN_MESSAGES, SCAN_QUERY
+    else:
+        limit, extra_query = MAX_MESSAGES_PER_RUN, ""
+    ids = gmail.list_message_ids(service, after, limit, extra_query)
+    if len(ids) >= limit:
         log.warning("Traff grensen på %d e-poster; eldre e-poster i vinduet ble hoppet over.", len(ids))
 
     client = make_client()
@@ -41,9 +46,14 @@ def check_new(notify: bool, lookback_days: int | None = None) -> list[dict]:
     retry_from: int | None = None
     new_findings: list[dict] = []
 
+    known = {f["id"] for f in state["findings"]}
+    # Med gratis regler koster det bare en Gmail-henting å vurdere på nytt, så en gjennomgang
+    # bakover i tid tar med forkastede e-poster igjen og fanger opp forbedrede regler.
+    recheck = lookback_days is not None and client is None
+
     try:
         for msg_id in ids:
-            if msg_id in state["processed"]:
+            if msg_id in known or (msg_id in state["processed"] and not recheck):
                 continue
             email = gmail.get_email(service, msg_id)
             if not looks_job_related(email):
@@ -91,11 +101,36 @@ def check_new(notify: bool, lookback_days: int | None = None) -> list[dict]:
         if lookback_days is None:
             state["last_check"] = retry_from - 60 if retry_from else now
         save_state(state)
+        try:
+            write_dashboard()
+        except Exception:
+            log.exception("Kunne ikke oppdatere oversikten")
 
     new_findings.sort(key=lambda f: f["received"])
     if notify:
         notify_findings(new_findings)
     return new_findings
+
+
+def reclassify() -> dict:
+    """Sorter lagrede regelfunn på nytt, f.eks. etter at reglene i rules.py er endret."""
+    state = load_state()
+    service = gmail.get_service()
+    kept, changed, dropped = [], 0, 0
+    for f in state["findings"]:
+        if f["verified"]:
+            kept.append(f)
+            continue
+        new = _rule_finding(gmail.get_email(service, f["id"]))
+        if new is None:
+            dropped += 1
+            continue
+        changed += new["category"] != f["category"]
+        kept.append(new)
+    state["findings"] = kept
+    save_state(state)
+    write_dashboard()
+    return {"endret": changed, "fjernet": dropped, "totalt": len(kept)}
 
 
 def recent_findings(days: int) -> list[dict]:

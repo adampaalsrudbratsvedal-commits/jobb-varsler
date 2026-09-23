@@ -3,12 +3,26 @@
 Går gjennom Gmail og varsler deg når du får jobbrelatert tilbakemelding: mottatt søknad,
 intervju, avslag, tilbud eller neste steg.
 
-To deler deler samme logikk og tilstand (`data/state.json`), så du aldri får samme varsel to ganger:
+Tre deler bruker samme logikk og tilstand (`data/state.json`), så du aldri får samme varsel to ganger:
 
 - **Bakgrunnsjobb** (`poll.py`): Windows Oppgaveplanlegger kjører den hvert 15. minutt og viser
-  et Windows-varsel. Klikker du på varselet, åpnes e-posten i Gmail.
-- **MCP-server** (`server.py`): gir Claude verktøyene `check_job_feedback`, `list_job_feedback`
-  `scan_job_feedback` og `read_email`, så du kan spørre «har jeg fått svar på noen søknader denne uka?».
+  et Windows-varsel når en bedrift svarer (intervju, avslag, tilbud, neste steg). Du kan velge
+  **Åpne i Gmail** eller **Se oversikt** fra varselet. «Søknad mottatt» gir ikke varsel
+  (`NOTIFY_CATEGORIES` i `config.py`).
+- **Varslingssentralen** (`data/oversikt.html`): en oversikt over alle søknader, gruppert per
+  bedrift, med status, tidslinje og de siste svarene. Den oppdateres etter hver sjekk. Du åpner
+  den med snarveien *Jobbsøknader* på skrivebordet eller med `python oversikt.py`. Siden er lokal
+  og sender ingenting noe sted.
+- **MCP-server** (`server.py`): gir Claude verktøy for å spørre om søknadene dine:
+  - `list_applications`: oversikten per bedrift
+  - `check_job_feedback`: nye e-poster siden sist
+  - `scan_job_feedback`: går gjennom innboksen bakover i tid
+  - `read_email`: leser hele e-posten
+  - `correct_finding`: retter bedrift eller kategori, eller skjuler et feil funn
+  - `open_dashboard`: åpner oversikten
+
+  Du kan for eksempel spørre «hvem har jeg ikke hørt fra på over to uker?» eller
+  «skjul Epinova fra søknadsoversikten».
 
 Slik vurderes hver e-post: et nøkkelordfilter (`KEYWORDS` i `jobbvarsler/config.py`) luker ut
 det meste. Treffene sorteres så med gratis fraseregler (`jobbvarsler/rules.py`), som skiller ut
@@ -115,8 +129,14 @@ Første kjøring ser 3 dager tilbake. Logg: `data/jobbvarsler.log`.
 
 ## Tilpasning
 
-- `jobbvarsler/config.py`: nøkkelord, modell, hvor langt tilbake første kjøring ser.
-- `jobbvarsler/classifier.py`: hva Claude regner som tilbakemelding, og kategoriene.
+- `jobbvarsler/config.py`: nøkkelord, hvilke kategorier som gir varsel, hvor langt tilbake første kjøring ser.
+- `jobbvarsler/rules.py`: frasene de gratis reglene ser etter.
+- `jobbvarsler/applications.py`: hvordan bedriftsnavn hentes ut fra avsender og emne.
+- `jobbvarsler/classifier.py`: hva Claude regner som tilbakemelding (brukes bare med API-nøkkel).
 - `jobbvarsler/notify.py`: varseltekstene.
 
-Vil du bare varsles om intervju og tilbud, filtrerer du på `category` i `notify_findings`.
+Har du endret reglene, sorterer du de lagrede funnene på nytt med:
+
+```bash
+.venv\Scripts\python.exe -c "from jobbvarsler.pipeline import reclassify; print(reclassify())"
+```

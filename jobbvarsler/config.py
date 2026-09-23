@@ -11,12 +11,20 @@ CREDENTIALS_FILE = DATA_DIR / "credentials.json"
 TOKEN_FILE = DATA_DIR / "token.json"
 STATE_FILE = DATA_DIR / "state.json"
 LOG_FILE = DATA_DIR / "jobbvarsler.log"
+DASHBOARD_FILE = DATA_DIR / "oversikt.html"
 
 MODEL = "claude-opus-5"
 
 # Første kjøring ser så langt tilbake; senere kjøringer starter der forrige slapp.
 FIRST_RUN_LOOKBACK_DAYS = 3
 MAX_MESSAGES_PER_RUN = 200
+# Ved gjennomgang bakover i tid spør vi Gmail bare etter e-poster med disse ordene,
+# så vi slipper å laste ned hele innboksen. Gmail matcher hele ord, derfor bøyningene.
+SCAN_QUERY = (
+    "{søknad søknaden søknader søkt søker stilling stillingen intervju rekruttering kandidat "
+    "application applied applying interview candidate position recruitment offer}"
+)
+MAX_SCAN_MESSAGES = 1000
 # ATS-e-poster er korte; taket hindrer at lange nyhetsbrev blir dyre å klassifisere.
 MAX_BODY_CHARS = 15_000
 # Hvor lenge vi husker hvilke e-poster som allerede er vurdert.
